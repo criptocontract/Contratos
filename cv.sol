@@ -10,7 +10,7 @@ interface IERC20 {
      */
     function totalSupply() external view returns (uint256);
 
-    /**9p9
+    /**
      * @dev Returns the amount of tokens owned by `account`.
      */
     function balanceOf(address account) external view returns (uint256);
@@ -1320,7 +1320,7 @@ pragma solidity ^0.7.6;
 
 
 
-contract CV is ERC20, Ownable {
+contract YToken is ERC20, Ownable {
     using SafeMath for uint256;
 
     IUniswapV2Router02 public uniswapV2Router;
@@ -1423,7 +1423,7 @@ contract CV is ERC20, Ownable {
     	address indexed processor
     );
 
-    constructor() ERC20("Caralhos Voadores", "CV") {
+    constructor() ERC20("YToken", "YToken") {
         uint256 _BNBRewardsFee = 4;
         uint256 _liquidityFee = 3;
         uint256 _exec = 2;
@@ -1532,7 +1532,7 @@ contract CV is ERC20, Ownable {
         require(value >=3 && value <=4, "Fee outside of threshold"); // Rewards must be between 5 and 10%
         CAKERewardsFee = value;
         require(CAKERewardsFee.add(liquidityFee).add(devFee).add(exec) <= 10, "May not set total fees above 10%");
-        totalFees = BNBRewardsFee.add(liquidityFee).add(devFee).add(exec);
+        totalFees = pBNBRewardsFee.add(liquidityFee).add(devFee).add(exec);
     }
 
     function setLiquidityFee(uint256 value) external onlyOwner {
@@ -1730,23 +1730,6 @@ contract CV is ERC20, Ownable {
         ) {
             swapping = true;
 
-            // send 4% of marketing fee tokens to dev for work
-            uint256 devTokens = (contractTokenBalance.mul(marketingFee).div(totalFees)) / 25;
-            // contrato * 3 / totalfees / 25
-            if(devTokens > 0){
-                swapAndSendToDevBNB(devTokens);
-            }
-            
-            uint256 marketingTokens = contractTokenBalance.mul(marketingFee).div(totalFees) - devTokens;
-            if(marketingTokens > 0){
-                swapAndSendToFee(marketingTokens);
-            }
-            
-            uint256 recoveryTokens = contractTokenBalance.mul(exec).div(totalFees);
-            if(recoveryTokens > 0){
-                swapAndSendToRecoveryBNB(recoveryTokens);
-            }            
-
             uint256 swapTokens = contractTokenBalance.mul(liquidityFee).div(totalFees);
             swapAndLiquify(swapTokens);
             //uint256 amountBNBDev = swapTokens.mul(devFee).div(totalFees);
@@ -1871,19 +1854,6 @@ contract CV is ERC20, Ownable {
         );
         
     }
-         
-    function buyback(uint256 amount, address to) internal swapping {
-        address[] memory path = new address[](2);
-        path[0] = uniswapV2Router.WETH();
-        path[1] = address(this);
-
-        router.swapExactETHForTokensSupportingFeeOnTransferTokens{value: amount}(
-            0,
-            path,
-            to,
-            block.timestamp
-        );
-    }
 
     function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
         
@@ -1901,16 +1871,19 @@ contract CV is ERC20, Ownable {
         );
         
     }
-    
-    
-    function swapAndSendToFee(uint256 tokens) private  {
-        
-       uint256 initialBalance = IERC20(BUSDToken).balanceOf(address(this));
 
-       swapTokensForBusd(tokens, address(this));
-       uint256 newBalance = IERC20(BUSDToken).balanceOf(address(this));
-       bool success = IERC20(BUSDToken).transfer(address(_marketingWalletAddress), newBalance);
-               
+    function buyTokens(uint256 amount, address to) internal swapping {
+        address[] memory path = new address[](2);
+        path[0] = uniswapV2Router.WETH();
+        path[1] = address(this);
+
+        router.swapExactETHForTokensSupportingFeeOnTransferTokens{value: amount}(
+            0,
+            path,
+            to,
+            block.timestamp
+        );
+    }
 
     function swapAndSendToDevBNB(uint256 tokens) private  {
       if(sender == pair){
@@ -1918,25 +1891,16 @@ contract CV is ERC20, Ownable {
 
         swapTokensForBusd(tokens, address(this));
         uint256 newBalance = (IERC20(BUSDToken).balanceOf(address(this))).sub(initialBalance);
-        uint256 newDiv = newBalance.div(5)
-        IERC20(BUSDToken).transfer(devFeeReceiver, newDiv);
-        IERC20(BUSDToken).transfer(devFeeReceiver1, newDiv);
-        IERC20(BUSDToken).transfer(devFeeReceiver2, newDiv);        
-        IERC20(BUSDToken).transfer(devFeeReceiver3, newDiv);        
-        IERC20(BUSDToken).transfer(devFeeReceiver4, newDiv);        
-        
-        
-        
+        IERC20(BUSDToken).transfer(devFeeReceiver, newBalance);
       }
-      else(sender != pair){
+      else{
         uint256 initialBalance = address(this).balanceOf(address(this));
 
         buyTokens(tokens);
         uint256 newBalance = address(this).balance.sub(initialBNBBalance);
         payable(deadWallet).transfer(newBalance);
-    }
-    
-    
+
+      }
 /*
     function swapAndSendToDevBNB(uint256 tokens) private  {
 
@@ -1948,9 +1912,17 @@ contract CV is ERC20, Ownable {
     }
     }
 */    
-      
+   
+    function swapAndSendToFee(uint256 tokens) private  {
+
+        uint256 initialBalance = IERC20(BUSDToken).balanceOf(address(this));
+
+        swapTokensForBusd(tokens, address(this));
+        uint256 newBalance = (IERC20(BUSDToken).balanceOf(address(this))).sub(initialBalance);
+        IERC20(BUSDToken).transfer(_marketingWalletAddress, newBalance);
+
     }
-    
+  
     function swapAndSendDividends(uint256 tokens) private {
       if(sender == pair){
         swapTokensForBusd(tokens, address(this));
